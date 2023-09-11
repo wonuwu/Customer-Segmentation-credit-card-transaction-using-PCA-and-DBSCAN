@@ -266,15 +266,8 @@ ggplot(proportions, aes(x = variable, y = proportion, fill = factor(cluster))) +
   labs(x = "Features", y = "Proportion", fill = "Cluster") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
 
 
-RECOMMENDATIONS:
-1. for tenure variable no need to separate from tenure 1 to 7 why not make 2 tenure so that tenure variable is won't be redundant. So tenure 0 is membership stay within a year and tenure 1 is a year and more. (these two variables may be viewed as new and old service users).
-
-2. the graphs of the clusters says a lot, might squeeze more information from the graphs. 
-
-3. 
 
 
 
