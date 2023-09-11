@@ -6,6 +6,7 @@ ABOUT THE DATASET:
 The dataset utilized is the "CC General" dataset, a comprehensive collection of credit card transaction records of customers in a mall setting. It encompasses data from 8,950 customer card accounts alongside 23 features, making it a substantial source for exploring customer behavior and segmentation. The dataset was taken from Kaggle, a  well-known online platform for the data science community and is stored with more than thousands of datasets.  
 
 Features found on the dataset: 
+
 CUST_ID : Customer's credit card accounts.
 
 BALANCE : The total remaining amount of money in the customer's account.
