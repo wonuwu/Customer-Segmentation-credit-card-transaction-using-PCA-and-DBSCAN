@@ -1,0 +1,281 @@
+---
+title: "scaling, pre-processing, PCA, DBSCAN"
+author: "Christine Jane B. Oledan"
+date: "2023-05-08"
+output: html_document
+---
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+```
+
+#scaling in r script
+```{r}
+source("scaling_funs.R")
+```
+
+```{r}
+#| message: false
+#| warning: false
+setwd("D:/thesis")
+dd <- read_csv("CC General.csv")
+head(dd)
+```
+
+
+```{r}
+########## DATA PRE-PROCESSING #############
+
+# ------ DETECTION AND HANDLING QUALITY ISSUES ---------- # 
+
+CCcopy <- dd
+
+# >>>>>  MISSING VALUES <<<<<<<< #
+# Checking for missing values
+anyNA(dd)
+# Shows the number of missing values in each column
+sapply(dd, function(x) sum(is.na(x)))
+# >>>>> END OF MISSING VALUES <<<<<<<< #
+
+
+```
+
+```{r}
+#imputing missing values using its median
+mp <- dd$MINIMUM_PAYMENTS[is.na(dd$MINIMUM_PAYMENTS)]<- median(dd$MINIMUM_PAYMENTS,na.rm = TRUE)
+mp
+cl <- dd$CREDIT_LIMIT[is.na(dd$CREDIT_LIMIT)]<- median(dd$CREDIT_LIMIT,na.rm = TRUE)
+cl
+
+# Checking for missing values
+anyNA(dd)
+sapply(dd, function(x) sum(is.na(x)))
+```
+
+#data scaling
+```{r}
+
+dd %>% 
+  mutate(TENURE = as_factor(TENURE)) -> dd_fin
+
+cc <- dd_fin %>% 
+  categorical_scale(TENURE) %>% 
+  mutate(across(is.double, ~continuous_scale(.x, na.rm = FALSE))) # set na.rm = FALSE if this function is applied after imputation
+
+cc
+
+```
+
+```{r}
+########## DATA PRE-PROCESSING #############
+
+# ------ DETECTION AND HANDLING QUALITY ISSUES ---------- # 
+# >>>>>  MISSING VALUES <<<<<<<< #
+# Checking for missing values
+anyNA(cc)
+# Shows the number of missing values in each column
+sapply(cc, function(x) sum(is.na(x)))
+# >>>>> END OF MISSING VALUES <<<<<<<< #
+```
+
+
+```{r}
+glimpse(cc)
+head(cc)
+summary(cc)
+```
+
+```{r}
+# Extract features
+cc_features <- cc %>% 
+  select(-CUST_ID) %>% # remove CUST_ID variable
+  as.matrix() # convert to matrix format
+```
+
+
+
+```{r}
+library(dbscan)
+library(factoextra)
+library(cluster)
+library(pracma)        
+
+# Apply PCA for dimensionality reduction
+pca_result <- prcomp(cc_features, scale = FALSE)
+
+# Determine the number of PCs to keep using the elbow method
+fviz_eig(pca_result, addlabels = TRUE)
+
+# Choose the number of PCs to keep based on the elbow method
+num_pcs <- 5
+
+# Extract the PCs to use for clustering
+pcs <- pca_result$x[, 1:num_pcs]
+
+```
+i'll use pc5 (5.4%) to represent the dataset.
+
+
+#need to find the k.
+
+STEP 1: Determine the value of the neighbourhood radius (eps), and the minimum point number (minpts) of the parameter.
+```{r}
+kNNdistplot(pcs, k = 10)
+abline(h=0.25, col = "red", lty=2)
+```
+utilizing k-distance plot i will find the optimal parameters for dbscan clustering algorithm. As shown above the knee point is 
+
+
+```{r}
+library(ggplot2)
+library(pracma)
+library(igraph)
+```
+
+
+```{r}
+set.seed(1234)
+library(cluster)
+library(fpc)
+
+install.packages("dbscan")
+library(dbscan)
+
+# Perform DBSCAN clustering
+dbscan_result1 <- dbscan(pcs, eps = 0.24, minPts = 10)
+
+# View summary of clusters
+summary(dbscan_result1)
+
+
+library(factoextra)
+# Visualize clusters
+fviz_cluster(dbscan_result1, data = pcs, geom = "point", frame.type = "norm")
+```
+
+
+```{r}
+# Count the number of points in each cluster
+table(dbscan_result1$cluster)
+```
+
+
+
+
+
+The DBI is a measure of the average dissimilarity between clusters, where a lower value indicates better-defined clusters. The higher Silhouette score indicates a better overall cohesion and separation of the data points within each cluster.
+
+#EVALUATION METRIC FOR DBSCAN
+#SILHOUETTE SCORE and DAVIS BOULDIN INDEX SCORE
+```{r}
+library(MASS)
+library(cluster)
+# Extract cluster assignments
+clusters <- dbscan_result1$cluster
+
+# Calculate Silhouette Score
+silhouette_score <- silhouette(clusters, dist(pcs))
+
+library(clusterSim)
+# Calculate Davies-Bouldin Index (DBI)
+dbi <- index.DB(pcs, clusters)
+
+# Print the Silhouette Score and DBI
+cat("Silhouette Score:", mean(silhouette_score[,3]), "\n")
+cat("Davies-Bouldin Index:", dbi$DB, "\n")
+```
+
+
+Add code for clustering result to dataset features( code from vince)
+```{r}
+summary(clusters)
+table(clusters)
+cluster_means <- aggregate(cc_features, by = list(cluster = clusters), mean)
+cluster_means
+
+```
+
+
+
+```{r}
+library(reshape2)
+library(ggplot2)
+
+# Reshape the data frame to long format
+cluster_means_long <- reshape2::melt(cluster_means, id.vars = "cluster", variable.name = "feature", value.name = "mean_value")
+
+# Create a separate bar plot for each cluster
+cluster_plots <- lapply(unique(cluster_means_long$cluster), function(clust) {
+  # Filter data for the current cluster
+  cluster_subset <- subset(cluster_means_long, cluster == clust)
+  
+  # Create the bar plot for the current cluster
+  ggplot(cluster_subset, aes(x = feature, y = mean_value, fill = feature)) +
+    geom_bar(stat = "identity") +
+    ggtitle(paste("Cluster", clust)) +
+    xlab("Feature") +
+    ylab("Mean Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          legend.position = "none")
+})
+
+# Print the bar plots for each cluster
+for (i in seq_along(cluster_plots)) {
+  print(cluster_plots[[i]])
+}
+```
+
+
+```{r}
+library(reshape2)
+library(ggplot2)
+
+# Melt the data frame for plotting
+melted_means <- melt(cluster_means, id.vars = "cluster")
+
+# Plot the line graph
+ggplot(melted_means, aes(x = variable, y = value, color = factor(cluster), group = cluster)) +
+  geom_line() +
+  labs(x = "Features", y = "Mean Value") +
+  scale_color_discrete(name = "Cluster") +
+  theme_minimal() + 
+  theme(axis.text.x =
+          element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+library(reshape2)
+library(dplyr)
+library(ggplot2)
+
+# Melt the data frame for plotting
+melted_means <- melt(cluster_means, id.vars = "cluster")
+
+# Calculate the proportions for each cluster within each feature
+proportions <- melted_means %>%
+  group_by(variable) %>%
+  mutate(proportion = value / sum(value))
+
+# Plot the stacked bar chart with proportions
+ggplot(proportions, aes(x = variable, y = proportion, fill = factor(cluster))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Features", y = "Proportion", fill = "Cluster") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+RECOMMENDATIONS:
+1. for tenure variable no need to separate from tenure 1 to 7 why not make 2 tenure so that tenure variable is won't be redundant. So tenure 0 is membership stay within a year and tenure 1 is a year and more. (these two variables may be viewed as new and old service users).
+
+2. the graphs of the clusters says a lot, might squeeze more information from the graphs. 
+
+3. 
+
+
+
+
